@@ -1,3 +1,4 @@
+
 package server
 
 import (
@@ -21,6 +22,7 @@ type App struct {
 
 	listener     net.Listener
 	httpListener net.Listener
+	httpsListener net.Listener
 
 	ldb *ledis.Ledis
 
@@ -110,7 +112,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 	if app.info, err = newInfo(app); err != nil {
 		return nil, err
 	}
-
+	var emptyTlsCfg *tls.Config
 	var tlsCfg *tls.Config
 	if cfg.TLS.Enabled {
 		tlsCfg, err = tlsConfig(&cfg.TLS)
@@ -145,7 +147,15 @@ func NewApp(cfg *config.Config) (*App, error) {
 	}
 
 	if len(cfg.HttpAddr) > 0 {
-		if app.httpListener, err = listen(netType(cfg.HttpAddr), cfg.HttpAddr, tlsCfg); err != nil {
+		if app.httpListener, err = listen(netType(cfg.HttpAddr), cfg.HttpAddr, emptyTlsCfg); err != nil {
+			return nil, err
+		}
+	}
+	if len(cfg.HttpsAddr) > 0 {
+		if(!cfg.TLS.Enabled){
+			panic("Fail to start https service: please config TLS and https information at same time")
+		}
+		if app.httpsListener, err = listen(netType(cfg.HttpsAddr), cfg.HttpsAddr, tlsCfg); err != nil {
 			return nil, err
 		}
 	}
@@ -233,6 +243,7 @@ func (app *App) Run() {
 	}
 
 	go app.httpServe()
+	go app.httpsServe()
 
 	for {
 		select {
@@ -257,11 +268,34 @@ func (app *App) httpServe() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		newClientHTTP(app, w, r)
+		switch r.Method {
+		case http.MethodPost:
+			// Create a new record.
+			newClientPostHTTP(app, w, r)
+		default:
+			newClientHTTP(app, w, r)
+		}
+
 	})
 
 	svr := http.Server{Handler: mux}
 	svr.Serve(app.httpListener)
+}
+
+
+func (app *App) httpsServe() {
+	if app.httpsListener == nil {
+		return
+	}
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		newClientHTTP(app, w, r)
+	})
+
+	svr := http.Server{Handler: mux}
+	svr.Serve(app.httpsListener)
 }
 
 func (app *App) Ledis() *ledis.Ledis {
@@ -271,3 +305,4 @@ func (app *App) Ledis() *ledis.Ledis {
 func (app *App) Address() string {
 	return app.listener.Addr().String()
 }
+

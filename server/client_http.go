@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,7 +58,23 @@ func newClientHTTP(app *App, w http.ResponseWriter, r *http.Request) {
 	c.perform()
 	c.client.close()
 }
+func newClientPostHTTP(app *App, w http.ResponseWriter, r *http.Request) {
+	app.connWait.Add(1)
+	defer app.connWait.Done()
 
+	var err error
+	c := new(httpClient)
+	c.client = newClient(app)
+
+	err = c.makePostRequest(app, r, w)
+	if err != nil {
+		c.client.close()
+		w.Write([]byte(err.Error()))
+		return
+	}
+	c.perform()
+	c.client.close()
+}
 func (c *httpClient) addr(r *http.Request) string {
 	return r.RemoteAddr
 }
@@ -94,7 +111,43 @@ func (c *httpClient) makeRequest(app *App, r *http.Request, w http.ResponseWrite
 	c.resp = &httpWriter{contentType, cmd, w}
 	return nil
 }
+func (c *httpClient) makePostRequest(app *App, r *http.Request, w http.ResponseWriter) error {
+	var err error
 
+	db, cmd, argsStr, contentType := c.parseReqPath(r)
+
+	c.db, err = app.ldb.Select(db)
+	if err != nil {
+		return err
+	}
+
+	contentType = strings.ToLower(contentType)
+
+	if _, ok := allowedContentTypes[contentType]; !ok {
+		return fmt.Errorf("unsupported content type: '%s', only json, bson, msgpack are supported", contentType)
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	args := make([][]byte, len(argsStr) + 1)
+	for i, arg := range argsStr {
+		args[i] = []byte(arg)
+	}
+	args[len(argsStr)] = body
+
+	c.cmd = strings.ToLower(cmd)
+	if _, ok := httpUnsupportedCommands[c.cmd]; ok {
+		return fmt.Errorf("unsupported command: '%s'", cmd)
+	}
+
+	c.args = args
+
+	c.remoteAddr = c.addr(r)
+	c.resp = &httpWriter{contentType, cmd, w}
+	return nil
+}
 func (c *httpClient) parseReqPath(r *http.Request) (db int, cmd string, args []string, contentType string) {
 
 	contentType = r.FormValue("type")
@@ -255,3 +308,4 @@ func writeMsgPack(result interface{}, w http.ResponseWriter) {
 		log.Error(err.Error())
 	}
 }
+

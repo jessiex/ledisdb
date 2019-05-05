@@ -8,7 +8,9 @@ addr = "127.0.0.1:6380"
 addr_unixsocketperm = "0770"
 
 # Server http listen address, set empty to disable
-http_addr = "127.0.0.1:11181"
+https_addr = "0.0.0.0:11181"
+http_addr = "0.0.0.0:11180"
+
 
 # Data store path, all ledisdb's data will be saved here
 data_dir = "/tmp/ledis_server"
@@ -36,7 +38,6 @@ readonly = false
 #   goleveldb
 #   memory
 #
-db_name = "leveldb"
 
 # If not set, use data_dir/"db_name"_data
 db_path = ""
@@ -164,7 +165,8 @@ path = ""
 # Reserve newest max_num snapshot dump files
 max_num = 1
 
+
 [tls]
 enabled = true
-certificate = "test.crt"
-key = "test.key"
+certificate = "/root/go/src/github.com/siddontang/ledisdb/server.crt"
+key = "/root/go/src/github.com/siddontang/ledisdb/server.key"

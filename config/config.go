@@ -115,6 +115,7 @@ type Config struct {
 	AddrUnixSocketPerm string `toml:"addr_unixsocketperm"`
 
 	HttpAddr string `toml:"http_addr"`
+	HttpsAddr string `toml:"https_addr"`
 
 	SlaveOf string `toml:"slaveof"`
 
